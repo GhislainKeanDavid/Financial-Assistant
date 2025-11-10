@@ -1,0 +1,19 @@
+# Core LangChain and LangGraph Orchestration
+langchain-core
+langchain-community
+langgraph
+
+# LLM Provider (You can swap this for others like anthropic, google-genai, etc.)
+openai
+
+# API Framework and Server
+fastapi
+uvicorn
+
+# Environment Management
+python-dotenv
+pydantic
+
+# Telegram Integration
+python-telegram-bot[webhooks]
+httpx # For making internal API calls
