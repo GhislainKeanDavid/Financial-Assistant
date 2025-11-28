@@ -1,27 +1,11 @@
 import datetime
-import random # Used for simulation/placeholders
 from langchain.tools import tool
 from models.state import Transaction
-from models.budget import Budget
 from typing import List
+from langchain_core.tools import tool 
+from models.budget import Budget
+from .db_manager import record_transaction_db, get_spending_sum_db
 
-# --- SIMULATED PERSISTENCE ---
-# IMPORTANT: In a real "Anywhere, Anytime" deployment, this dictionary 
-# will be replaced by a connection to a HOSTED DATABASE (PostgreSQL, Supabase).
-FINANCIAL_DATA = {} 
-
-def _get_current_spending(user_id: str, category: str, period: str) -> float:
-    """Helper function to simulate querying current spending from a database."""
-    # In a real database, this would execute a complex SELECT SUM() query 
-    # filtered by user_id, category, and date range (daily/weekly).
-    
-    # Placeholder Logic:
-    if period == "day":
-        # Simulates different spending for demonstration
-        return random.choice([25.0, 50.0, 75.0]) 
-    if period == "week":
-        return random.choice([500.0, 750.0, 900.0])
-    return 0.0
 
 # --- FINANCIAL AGENT TOOLS ---
 
@@ -30,39 +14,36 @@ def record_transaction(
     amount: float,
     category: str,
     user_id: str,
-    description: str = ""
+    description: Optional[str] = None # Change description to Optional
 ) -> str:
     """Records a new financial transaction (expense or income) to the database."""
-    if user_id not in FINANCIAL_DATA:
-        FINANCIAL_DATA[user_id] = []
-    
     if amount <= 0:
         return "Error: Amount must be positive. Please specify a valid expense."
     
-    # 1. Simulate saving the transaction
-    FINANCIAL_DATA[user_id].append(
-        {"date": datetime.date.today().isoformat(), "amount": amount, "category": category, "description": description}
-    )
-    
-    # 2. Tell the agent to proceed to budget check or confirmation
-    return f"Transaction of ${amount} recorded successfully. Ready for budget check."
+    # NEW LOGIC: Call the database manager
+    success = record_transaction_db(user_id, amount, category, description)
+
+    if success:
+        # Tell the agent what to do next
+        return f"Transaction of ${amount} recorded successfully. You MUST now use the check_budget tool."
+    else:
+        return "ERROR: Failed to record transaction due to a database error."
 
 @tool
 def check_budget(
     amount: float, 
     category: str, 
     user_id: str,
-    current_budget: Budget # Passed from the GraphState
+    current_budget: Budget 
 ) -> str:
     """Checks the daily and weekly budget limits against a pending expense for a category."""
     
-    # Get limits from the Budget model
     daily_limit = current_budget.daily_limits.get(category, float('inf')) 
     weekly_limit = current_budget.weekly_limits.get(category, float('inf')) 
 
-    # Get current spending using the placeholder function
-    current_day_spending = _get_current_spending(user_id, category, "day")
-    current_week_spending = _get_current_spending(user_id, category, "week")
+    # NEW LOGIC: Get real spending data from the database
+    current_day_spending = get_spending_sum_db(user_id, "day", category)
+    current_week_spending = get_spending_sum_db(user_id, "week", category)
 
     is_daily_over = (current_day_spending + amount) > daily_limit
     is_weekly_over = (current_week_spending + amount) > weekly_limit
@@ -74,27 +55,27 @@ def check_budget(
         if is_weekly_over:
             details += f"Weekly limit of ${weekly_limit:,.2f} will be exceeded (Current: ${current_week_spending:,.2f}). "
             
-        return f"BUDGET WARNING! The expense would cause an overspend. {details} Please confirm if you wish to proceed."
+        return f"BUDGET WARNING! The expense would cause an overspend. {details} Advise the user."
     
-    return "BUDGET SUCCESS: Transaction is within both daily and weekly budget limits. Proceed with confirmation."
+    return "BUDGET SUCCESS: Transaction is within both daily and weekly budget limits. Inform the user."
 
 @tool
 def get_daily_summary(user_id: str, current_budget: Budget) -> str:
     """Generates a formatted daily budget and spending summary for a proactive notification."""
-    today = datetime.date.today().strftime("%m/%d/%Y")
-    currency = current_budget.currency_symbol
-    name = current_budget.user_name
-
-    # Example placeholders for total spending and budget
-    total_week_expense = _get_current_spending(user_id, "All", "week")
+    # ... (code to get name and currency remains the same)
+    
+    # NEW LOGIC: Get real total weekly expense from the database
+    total_week_expense = get_spending_sum_db(user_id, "week", "All")
     weekly_budget = current_budget.weekly_limits.get("All", 2000.00) 
+    
+    # ... (rest of summary formatting remains the same)
+    # The return summary will now use real data.
     
     summary = f"Hello {name}!\n📅 {today}\n\n"
     summary += "--- WEEKLY FINANCIAL STATUS ---\n"
     summary += f"Weekly Budget: **{currency}{weekly_budget:,.2f}**\n"
     summary += f"Spent This Week: **{currency}{total_week_expense:,.2f}**\n"
-    summary += f"Remaining: **{currency}{(weekly_budget - total_week_expense):,.2f}**\n\n"
-    summary += "You are on track!" # In a real agent, this would be a detailed analysis.
+    summary += f"Remaining: **{currency}{(weekly_budget - total_week_expense):,.2f}**\n"
 
     return summary
 

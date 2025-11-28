@@ -1,0 +1,8 @@
+# Exclude Python environment and cache
+venv/
+__pycache__
+*.pyc
+
+# Exclude sensitive data and local files
+.env
+*.sqlite
