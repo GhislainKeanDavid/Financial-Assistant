@@ -1,10 +1,10 @@
 import datetime
-from langchain.tools import tool
 from models.state import Transaction
 from typing import List
+from typing import Optional
 from langchain_core.tools import tool 
 from models.budget import Budget
-from .db_manager import record_transaction_db, get_spending_sum_db
+from db_manager import record_transaction_db, get_spending_sum_db
 
 
 # --- FINANCIAL AGENT TOOLS ---

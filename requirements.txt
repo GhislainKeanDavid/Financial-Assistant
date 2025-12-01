@@ -2,6 +2,7 @@
 langchain-core
 langchain-community
 langgraph
+langchain
 
 # LLM Provider (You can swap this for others like anthropic, google-genai, etc.)
 openai

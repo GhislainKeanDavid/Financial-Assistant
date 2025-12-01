@@ -18,7 +18,8 @@ import httpx
 from agent_graph import app
 from models.state import GraphState
 from models.budget import Budget
-from database_tools import FINANCIAL_DATA 
+
+import os
 
 load_dotenv()
 
@@ -27,7 +28,6 @@ app_fastapi = FastAPI(title="LangGraph Financial Assistant API")
 
 # --- Telegram Constants (Read from .env) ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") 
-INTERNAL_API_URL = "http://127.0.0.1:8000/api/chat" 
 
 # --- Initialize Global State and Budget ---
 # This is a temporary, in-memory dictionary for user-specific state persistence
@@ -44,6 +44,33 @@ DEFAULT_BUDGET = Budget(
 class AgentRequest(BaseModel):
     user_input: str
     thread_id: str 
+
+async def handle_message(update: Update, context):
+    """Processes the message from Telegram and calls the internal /api/chat endpoint."""
+    if update.message and update.message.text and application:
+        user_input = update.message.text
+        chat_id = str(update.message.chat_id)
+        
+        # 1. Call the internal FastAPI endpoint
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.post(
+                    INTERNAL_API_URL, 
+                    json={"user_input": user_input, "thread_id": chat_id}
+                )
+                
+                if response.status_code == 200:
+                    api_response = response.json()
+                    final_text = api_response.get("response", "Sorry, I couldn't process that.")
+                else:
+                    final_text = f"Error: Agent API failed with status {response.status_code}."
+
+            except Exception as e:
+                print(f"Internal API Call Error: {e}")
+                final_text = "I'm sorry, I seem to be having trouble connecting to my brain right now."
+        
+        # 2. Send the final response back to the user via Telegram
+        await context.bot.send_message(chat_id=chat_id, text=final_text)
 
 # --- Agent Invocation Logic ---
 @app_fastapi.post("/api/chat")
@@ -96,32 +123,11 @@ else:
     application = None
 
 
-async def handle_message(update: Update, context):
-    """Processes the message from Telegram and calls the internal /api/chat endpoint."""
-    if update.message and update.message.text and application:
-        user_input = update.message.text
-        chat_id = str(update.message.chat_id)
-        
-        # 1. Call the internal FastAPI endpoint
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            try:
-                response = await client.post(
-                    INTERNAL_API_URL, 
-                    json={"user_input": user_input, "thread_id": chat_id}
-                )
-                
-                if response.status_code == 200:
-                    api_response = response.json()
-                    final_text = api_response.get("response", "Sorry, I couldn't process that.")
-                else:
-                    final_text = f"Error: Agent API failed with status {response.status_code}."
+if application:
+    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-            except Exception as e:
-                print(f"Internal API Call Error: {e}")
-                final_text = "I'm sorry, I seem to be having trouble connecting to my brain right now."
-        
-        # 2. Send the final response back to the user via Telegram
-        await context.bot.send_message(chat_id=chat_id, text=final_text)
+
+
 
 # Register the handler only if the application object was successfully initialized
 if application:
@@ -160,5 +166,8 @@ async def startup_event():
 
 
 # --- Server Run Command ---
+PORT = int(os.getenv("PORT", 8080))
+INTERNAL_API_URL = f"http://127.0.0.1:{PORT}/api/chat"
+
 if __name__ == "__main__":
-    uvicorn.run(app_fastapi, host="0.0.0.0", port=8000)
+    uvicorn.run(app_fastapi, host="0.0.0.0", port=PORT)

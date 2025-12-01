@@ -125,17 +125,3 @@ def create_agent_graph():
 
 # Example usage (Visualization code is assumed to be appended here)
 app = create_agent_graph()
-# ... (rest of the visualization code) ...
-
-graph_object = app.get_graph()
-
-print("="*50)
-print("LANGGRAPH VISUALIZATION")
-print("="*50)
-print("\n--- A. ASCII FLOWCHART ---")
-print(graph_object.draw_ascii())
-print("\n--- B. MERMAID CODE ---")
-mermaid_code = graph_object.draw_mermaid()
-print(mermaid_code)
-print("\nCopy the code above and paste it into a Mermaid viewer (e.g., mermaid.live) to see the visual flowchart.")
-print("="*50)
