@@ -72,3 +72,89 @@ def get_spending_sum_db(user_id: str, period: str, category: Optional[str] = Non
     except Exception as e:
         print(f"Database Error on query: {e}")
         return 0.0
+
+
+def get_expenses_by_date_db(user_id: str, query_date: str) -> str:
+    """Retrieves expenses for a specific date from the database."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Query to get transaction details for a specific expense_date
+        # We order by record_date to show them in the order they were entered
+        sql = """
+            SELECT category, amount, description 
+            FROM transactions 
+            WHERE user_id = %s AND expense_date = %s
+            ORDER BY record_date ASC;
+        """
+        cur.execute(sql, (user_id, query_date))
+        rows = cur.fetchall()
+        
+        cur.close()
+        conn.close()
+
+        if not rows:
+            return f"No expenses found for {query_date}."
+
+        # Format the output into a readable string for the LLM
+        report = f"Expenses for {query_date}:\n"
+        total = 0.0
+        for row in rows:
+            category, amount, description = row
+            desc_str = f" ({description})" if description else ""
+            report += f"- {category}: ₱{float(amount):,.2f}{desc_str}\n"
+            total += float(amount)
+        
+        report += f"\nTotal: ₱{total:,.2f}"
+        return report
+
+    except Exception as e:
+        print(f"Database Error on query: {e}")
+        return f"Error retrieving data: {str(e)}"
+
+
+def upsert_budget_db(user_id: str, daily: float, weekly: float, monthly: float) -> bool:
+    """Updates the budget limits for a user."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Upsert: Insert if new, Update if exists
+        sql = """
+            INSERT INTO budgets (user_id, daily_limit, weekly_limit, monthly_limit, updated_at)
+            VALUES (%s, %s, %s, %s, NOW())
+            ON CONFLICT (user_id) 
+            DO UPDATE SET 
+                daily_limit = EXCLUDED.daily_limit,
+                weekly_limit = EXCLUDED.weekly_limit,
+                monthly_limit = EXCLUDED.monthly_limit,
+                updated_at = NOW();
+        """
+        cur.execute(sql, (user_id, daily, weekly, monthly))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Database Error on upsert_budget: {e}")
+        return False
+
+def get_budget_db(user_id: str):
+    """Retrieves the current budget limits for a user."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("SELECT daily_limit, weekly_limit, monthly_limit FROM budgets WHERE user_id = %s", (user_id,))
+        row = cur.fetchone()
+        
+        cur.close()
+        conn.close()
+        
+        if row:
+            return {"daily": float(row[0]), "weekly": float(row[1]), "monthly": float(row[2])}
+        return None # Return None if no budget set
+    except Exception as e:
+        print(f"Database Error on get_budget: {e}")
+        return None

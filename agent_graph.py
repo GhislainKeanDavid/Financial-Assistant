@@ -1,4 +1,5 @@
 import os
+import datetime
 from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -26,14 +27,20 @@ def call_model(state: GraphState):
     
     messages = state['messages']
     thread_id = state['thread_id']
+    current_date = datetime.date.today().strftime("%Y-%m-%d")
     
     # System prompt remains the same
     system_prompt = (
-        "You are a helpful financial assistant named Kean's MakwentaBot. Your thread_id is {thread_id}. "
-        "You MUST use the provided tools for recording, reporting, or checking budgets. "
-        "If a transaction is recorded, you must follow up with the 'check_budget' tool immediately. "
-        "Do NOT invent data or perform calculations yourself."
-    ).format(thread_id=thread_id)
+        f"You are a helpful financial assistant named Kean's MakwentaBot. "
+        f"Today's date is {current_date}. " 
+        f"Your thread_id is {thread_id}. "
+        "You have tools to record expenses, check budgets, retrieve past reports, and set new budgets. "
+        "1. If the user says 'Set my weekly budget to 5000', use 'set_my_budget' with amount=5000 and period='weekly'. "
+        "2. If the user wants to record a transaction, use 'record_transaction', then ALWAYS follow up with 'check_budget'. "
+        "3. If the user asks for expenses on a specific day (e.g., 'yesterday', 'last Friday', 'Dec 3'), "
+        "calculate the correct 'YYYY-MM-DD' date relative to today's date. "
+        "Do NOT invent data. If the tool returns 'No expenses found', tell the user exactly that."
+    )
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
